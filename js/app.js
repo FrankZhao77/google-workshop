@@ -58,7 +58,24 @@ function header(user) {
   </header>`;
 }
 
+/** Frees video decoders before a screen is replaced (16 picker thumbnails can otherwise starve MediaPipe). */
+function releaseVideos(root) {
+  root.querySelectorAll("video").forEach((v) => {
+    try {
+      v.pause();
+      if (v.srcObject) v.srcObject = null;
+      else if (v.getAttribute("src")) {
+        v.removeAttribute("src");
+        v.load();
+      }
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
 function render(user, html) {
+  releaseVideos(app);
   app.innerHTML = `${header(user)}<main>${html}</main>`;
   on("[data-action=logout]", "click", () => {
     store.setCurrentUser(null);
@@ -94,7 +111,7 @@ function modal(inner) {
   el.innerHTML = `<div class="modal" role="dialog" aria-modal="true">${inner}</div>`;
   document.body.appendChild(el);
   const close = () => {
-    el.querySelectorAll("video").forEach((v) => v.pause());
+    releaseVideos(el);
     el.remove();
   };
   el.addEventListener("click", (e) => {

@@ -115,11 +115,12 @@ export function computeMetrics(lm, ex, w, h) {
 export function framing(lm) {
   if (!lm) return { ok: false, msg: "Step into the frame" };
   const s = IDX[bestSide(lm)];
-  const need = [0, s.shoulder, s.hip, s.knee, s.ankle];
+  // Only the joints used for angles are required; a head at the top edge is fine.
+  const need = [s.shoulder, s.hip, s.knee, s.ankle];
   const seen = need.every((i) => vis(lm[i]) > 0.25);
   const inside = need.every((i) => lm[i].x > 0.01 && lm[i].x < 0.99 && lm[i].y > 0.01 && lm[i].y < 0.99);
   if (lm[s.ankle].y > 0.98 || lm[s.foot].y > 0.99) return { ok: false, msg: "Move back: your feet are cut off" };
-  if (lm[0].y < 0.01) return { ok: false, msg: "Move back: your head is cut off" };
+  if (lm[s.shoulder].y < 0.01) return { ok: false, msg: "Move back: your upper body is cut off" };
   if (!seen || !inside) return { ok: false, msg: "Move back so your whole body is visible" };
   return { ok: true, msg: "Full body in frame" };
 }

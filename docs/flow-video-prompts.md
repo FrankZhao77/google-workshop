@@ -13,20 +13,24 @@ Until a file is uploaded, the app shows a "Reference video coming soon" placehol
 
 ## Videos to make
 
-| # | File | Exercise | Equipment |
-|---|---|---|---|
-| 1 | `reverse-lunge.mp4` | Reverse Lunge | None |
-| 2 | `goblet-squat.mp4` | Goblet Squat | Dumbbell |
-| 3 | `rdl.mp4` | Dumbbell Romanian Deadlift | Dumbbell |
-| 4 | `step-up.mp4` | Step-up | Bench |
-| 5 | `glute-bridge.mp4` | Glute Bridge | None |
-| 6 | `wall-sit.mp4` | Wall Sit | Wall |
-| 7 | `incline-pushup.mp4` | Incline Push-up | Bench |
-| 8 | `bench-dip.mp4` | Bench Dip | Bench |
-| 9 | `bent-over-row.mp4` | Dumbbell Bent-over Row | Dumbbell |
-| 10 | `overhead-press.mp4` | Dumbbell Overhead Press | Dumbbell |
-| 11 | `mountain-climber.mp4` | Mountain Climber | None |
-| 12 | `bird-dog.mp4` | Bird Dog | None |
+**Still needed: `rdl.mp4`, `glute-bridge.mp4`, `mountain-climber.mp4`.** The other 9 are uploaded and checked.
+
+| # | File | Exercise | Equipment | Status |
+|---|---|---|---|---|
+| 1 | `reverse-lunge.mp4` | Reverse Lunge | None | ✅ |
+| 2 | `goblet-squat.mp4` | Goblet Squat | Dumbbell | ✅ |
+| 3 | `rdl.mp4` | Dumbbell Romanian Deadlift | Dumbbell | **needed** |
+| 4 | `step-up.mp4` | Step-up | Bench | ✅ |
+| 5 | `glute-bridge.mp4` | Glute Bridge | None | **needed** |
+| 6 | `wall-sit.mp4` | Wall Sit | Wall | ✅ |
+| 7 | `incline-pushup.mp4` | Incline Push-up | Bench | ✅ |
+| 8 | `bench-dip.mp4` | Bench Dip | Bench | ✅ |
+| 9 | `bent-over-row.mp4` | Dumbbell Bent-over Row | Dumbbell | ✅ (head slightly cut off at the top; fine for the app) |
+| 10 | `overhead-press.mp4` | Dumbbell Overhead Press | Dumbbell | ✅ |
+| 11 | `mountain-climber.mp4` | Mountain Climber | None | **needed** |
+| 12 | `bird-dog.mp4` | Bird Dog | None | ✅ |
+
+Tip: keep the whole body, including the head and feet, inside the frame with some margin. MediaPipe needs to see the joints.
 
 ## Prompts (add after the shared opening)
 

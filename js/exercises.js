@@ -355,7 +355,7 @@ const LUNGE_POSE = {
 const PUSHUP_POSE = {
   metrics: [
     { ...ELBOW, target: T("min", "<=", 100, "lowest elbow angle ≤ 100° = full depth") },
-    { ...BODY, target: T("min", ">=", 160, "body line stays ≥ 160° = no sagging or piking") },
+    { ...BODY, target: T("avg", ">=", 160, "average body line ≥ 160° = no sagging or piking") },
   ],
   rep: { metric: "elbow", work: "<", workAt: 115, restAt: 150 },
 };
@@ -392,20 +392,20 @@ const POSE = {
   pushup: PUSHUP_POSE,
   "incline-pushup": PUSHUP_POSE,
   "bench-dip": {
-    metrics: [{ ...ELBOW, target: T("min", "<=", 100, "elbow ≈ 90° at the bottom") }],
-    rep: { metric: "elbow", work: "<", workAt: 115, restAt: 150 },
+    metrics: [{ ...ELBOW, target: T("min", "<=", 115, "elbow ≈ 90–115° at the bottom") }],
+    rep: { metric: "elbow", work: "<", workAt: 125, restAt: 150 },
   },
   "bent-over-row": {
     metrics: [
-      { ...ELBOW, target: T("min", "<=", 100, "elbow ≤ 100° = full pull") },
-      { ...HIP, label: "Torso hinge", target: T("max", "<=", 150, "hip stays ≤ 150° = torso stays hinged") },
+      { ...ELBOW, target: T("min", "<=", 110, "elbow ≤ 110° = full pull") },
+      { ...HIP, label: "Torso hinge", target: T("avg", "<=", 165, "average hip ≤ 165° = torso stays hinged (upright ≈ 180°)") },
     ],
     rep: { metric: "elbow", work: "<", workAt: 115, restAt: 145 },
   },
   "overhead-press": {
     metrics: [
       { ...ELBOW, target: T("max", ">=", 160, "elbow ≥ 160° = full lockout") },
-      { ...BODY, label: "Body line (lean-back)", target: T("min", ">=", 165, "body line ≥ 165° = no leaning back") },
+      { ...BODY, label: "Body line (lean-back)", target: T("avg", ">=", 165, "average body line ≥ 165° = no leaning back") },
     ],
     rep: { metric: "elbow", work: ">", workAt: 150, restAt: 110 },
   },
@@ -415,7 +415,7 @@ const POSE = {
   "mountain-climber": {
     metrics: [
       { ...HIP, key: "drive", both: "min", label: "Knee drive (hip angle)", target: T("min", "<=", 90, "hip ≤ 90° = knee reaches the chest") },
-      { ...BODY, both: "max", label: "Plank line", target: T("min", ">=", 150, "plank line ≥ 150° = hips not piking") },
+      { ...BODY, both: "max", label: "Plank line", target: T("avg", ">=", 150, "average plank line ≥ 150° = hips not piking") },
     ],
     rep: { metric: "drive", work: "<", workAt: 100, restAt: 130 },
   },
