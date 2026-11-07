@@ -326,6 +326,107 @@ export const EXERCISES = [
   },
 ];
 
+// ---- MediaPipe pose metrics ---------------------------------------------
+// Each metric is an angle at the middle joint (2D, side view). `both: "min"/"max"` picks the
+// lower/higher of the two body sides (e.g. the front knee in a lunge). `target` is shown with
+// a ✓/✗ and passed to Gemini. `rep` counts a rep when the metric enters the work zone
+// (work "<" workAt, or ">" workAt) and then returns past restAt.
+
+const KNEE = { key: "knee", label: "Knee angle", joints: ["hip", "knee", "ankle"] };
+const HIP = { key: "hip", label: "Hip angle", joints: ["shoulder", "hip", "knee"] };
+const BODY = { key: "body", label: "Body line", joints: ["shoulder", "hip", "ankle"] };
+const ELBOW = { key: "elbow", label: "Elbow angle", joints: ["shoulder", "elbow", "wrist"] };
+
+const T = (stat, op, value, text) => ({ stat, op, value, text });
+
+const SQUAT_POSE = {
+  metrics: [
+    { ...KNEE, target: T("min", "<=", 100, "lowest knee angle ≤ 100° ≈ thighs parallel") },
+    { ...HIP, label: "Hip angle (torso lean)" },
+  ],
+  rep: { metric: "knee", work: "<", workAt: 125, restAt: 155 },
+};
+
+const LUNGE_POSE = {
+  metrics: [{ ...KNEE, both: "min", label: "Front knee angle", target: T("min", "<=", 100, "front knee ≈ 90° at the bottom") }],
+  rep: { metric: "knee", work: "<", workAt: 125, restAt: 155 },
+};
+
+const PUSHUP_POSE = {
+  metrics: [
+    { ...ELBOW, target: T("min", "<=", 100, "lowest elbow angle ≤ 100° = full depth") },
+    { ...BODY, target: T("min", ">=", 160, "body line stays ≥ 160° = no sagging or piking") },
+  ],
+  rep: { metric: "elbow", work: "<", workAt: 115, restAt: 150 },
+};
+
+const POSE = {
+  squat: SQUAT_POSE,
+  "goblet-squat": SQUAT_POSE,
+  lunge: LUNGE_POSE,
+  "reverse-lunge": LUNGE_POSE,
+  rdl: {
+    metrics: [
+      { ...HIP, label: "Hip hinge angle", target: T("min", "<=", 120, "hip angle ≤ 120° = a deep enough hinge") },
+      { ...KNEE, target: T("min", ">=", 130, "knees stay ≥ 130° (a hinge, not a squat)") },
+    ],
+    rep: { metric: "hip", work: "<", workAt: 135, restAt: 160 },
+  },
+  "step-up": {
+    metrics: [
+      { ...KNEE, key: "kneeBent", both: "min", label: "Working knee (bent)" },
+      { ...KNEE, key: "kneeTall", both: "max", label: "Standing knee", target: T("max", ">=", 165, "knee ≥ 165° = stood fully tall") },
+    ],
+    rep: { metric: "kneeBent", work: "<", workAt: 125, restAt: 155 },
+  },
+  "glute-bridge": {
+    metrics: [{ ...HIP, label: "Hip extension", target: T("max", ">=", 160, "hip ≥ 160° = straight line at the top") }],
+    rep: { metric: "hip", work: ">", workAt: 155, restAt: 135 },
+  },
+  "wall-sit": {
+    metrics: [
+      { ...KNEE, target: T("avg", "<=", 105, "average knee ≈ 90° = thighs parallel") },
+      { ...HIP, label: "Hip angle" },
+    ],
+  },
+  pushup: PUSHUP_POSE,
+  "incline-pushup": PUSHUP_POSE,
+  "bench-dip": {
+    metrics: [{ ...ELBOW, target: T("min", "<=", 100, "elbow ≈ 90° at the bottom") }],
+    rep: { metric: "elbow", work: "<", workAt: 115, restAt: 150 },
+  },
+  "bent-over-row": {
+    metrics: [
+      { ...ELBOW, target: T("min", "<=", 100, "elbow ≤ 100° = full pull") },
+      { ...HIP, label: "Torso hinge", target: T("max", "<=", 150, "hip stays ≤ 150° = torso stays hinged") },
+    ],
+    rep: { metric: "elbow", work: "<", workAt: 115, restAt: 145 },
+  },
+  "overhead-press": {
+    metrics: [
+      { ...ELBOW, target: T("max", ">=", 160, "elbow ≥ 160° = full lockout") },
+      { ...BODY, label: "Body line (lean-back)", target: T("min", ">=", 165, "body line ≥ 165° = no leaning back") },
+    ],
+    rep: { metric: "elbow", work: ">", workAt: 150, restAt: 110 },
+  },
+  plank: {
+    metrics: [{ ...BODY, target: T("avg", ">=", 140, "average body line ≥ 140° = hips roughly level (2D estimate)") }],
+  },
+  "mountain-climber": {
+    metrics: [
+      { ...HIP, key: "drive", both: "min", label: "Knee drive (hip angle)", target: T("min", "<=", 90, "hip ≤ 90° = knee reaches the chest") },
+      { ...BODY, both: "max", label: "Plank line", target: T("min", ">=", 150, "plank line ≥ 150° = hips not piking") },
+    ],
+    rep: { metric: "drive", work: "<", workAt: 100, restAt: 130 },
+  },
+  "bird-dog": {
+    metrics: [{ ...HIP, key: "reach", both: "max", label: "Leg reach (hip angle)", target: T("max", ">=", 160, "hip ≥ 160° = leg in line with the body") }],
+    rep: { metric: "reach", work: ">", workAt: 150, restAt: 120 },
+  },
+};
+
+for (const ex of EXERCISES) ex.pose = POSE[ex.id] || null;
+
 export function getExercise(id) {
   return EXERCISES.find((e) => e.id === id);
 }

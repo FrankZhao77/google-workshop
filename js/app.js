@@ -5,6 +5,7 @@ import * as store from "./store.js";
 import { EXERCISES, CATEGORIES, getExercise } from "./exercises.js";
 import { Recorder, countdown, beep } from "./recorder.js";
 import * as ai from "./gemini.js";
+import * as pose from "./pose.js";
 
 const RECORD_SECONDS = 15;
 const COUNTDOWN_SECONDS = 5;
@@ -309,7 +310,8 @@ function showPreview(ex) {
 // ---- session flow (C1-C6, D1-D5, E1-E2, F1-F4) ---------------------------
 
 function startSession(ids) {
-  session = { ids, index: 0, results: [], phase: "setup", clip: null, analysis: null, message: null, urls: [] };
+  session = { ids, index: 0, results: [], phase: "setup", clip: null, analysis: null, message: null, urls: [], measurements: null };
+  pose.loadPose().catch(() => {}); // start downloading MediaPipe while the user sets up
   go("session");
 }
 
@@ -354,7 +356,7 @@ function viewSession(user) {
   const body = {
     setup: () => setupView(ex),
     review: () => reviewView(),
-    analyzing: () => `<div class="center-block"><div class="spinner"></div><h2>Spotter is reviewing your set…</h2><p class="muted">This usually takes 10–30 seconds.</p></div>`,
+    analyzing: () => `<div class="center-block"><div class="spinner"></div><h2>Spotter is reviewing your set…</h2><p class="muted">This usually takes 5–30 seconds. If Google's servers are busy, Spotter switches to a faster model automatically.</p></div>`,
     invisible: () => noticeView("📷", "Spotter couldn't see you clearly", session.message, true),
     error: () => noticeView("⚠️", "Something went wrong", session.message, false),
     feedback: () => feedbackView(ex, session.analysis),
@@ -370,6 +372,9 @@ function setupView(ex) {
       <div class="stage ${ex.orientation}">
         <video id="live" class="mirror" autoplay muted playsinline></video>
         <div class="outline"><span>Fit your whole body inside</span></div>
+        <canvas class="pose-canvas" id="pose-canvas"></canvas>
+        <div class="pose-hud" id="pose-hud" hidden></div>
+        <div class="frame-pill" id="frame-pill">Starting camera…</div>
         <div class="overlay" id="overlay" hidden></div>
         <div class="rec" id="rec" hidden><span class="dot"></span> REC <span id="rec-time">${RECORD_SECONDS}</span>s</div>
         <div class="cam-error" id="cam-error" hidden></div>
@@ -391,10 +396,14 @@ function setupView(ex) {
 function reviewView() {
   return `
     <div class="stage-wrap">
-      <div class="stage"><video class="contain" src="${session.clip.url}" controls autoplay muted loop playsinline></video></div>
+      <div class="stage">
+        <video id="clip" class="contain" src="${session.clip.url}" controls autoplay muted loop playsinline></video>
+        <canvas class="pose-canvas" id="clip-canvas"></canvas>
+      </div>
       <aside class="side">
         <h3>Check your clip</h3>
         <p class="muted">Is your whole body visible from head to feet? If not, re-record before analyzing.</p>
+        <p class="measure-status" id="measure-status">${measureStatusText()}</p>
         <div class="stack">
           <button class="btn primary big" id="analyze">Analyze my form</button>
           <button class="btn" id="rerecord">↺ Re-record</button>
@@ -403,6 +412,40 @@ function reviewView() {
         ${demoBanner()}
       </aside>
     </div>`;
+}
+
+function measureStatusText() {
+  const m = session?.measurements;
+  if (session?.measuring) return "📐 Measuring your form with MediaPipe…";
+  if (!m) return session?.measureFailed ? "📐 Pose measurements unavailable for this clip." : "";
+  const parts = [m.reps != null ? `${m.reps} reps counted` : "hold tracked", `body tracked in ${m.detectedPct}% of frames`];
+  return `📐 MediaPipe: ${parts.join(" · ")}`;
+}
+
+/** "Measured by MediaPipe" panel for the feedback and history screens. */
+function measuredPanel(m) {
+  if (!m) return "";
+  const statName = { min: "lowest", max: "highest", avg: "average" };
+  const items = [];
+  if (m.reps != null) items.push(`<div class="m-item"><span class="m-val">${m.reps}</span><span class="m-label">reps counted</span></div>`);
+  for (const x of m.metrics) {
+    const stat = x.target?.stat || "min";
+    const cls = x.met === true ? "ok" : x.met === false ? "bad" : "";
+    items.push(`<div class="m-item ${cls}">
+      <span class="m-val">${x[stat]}°</span>
+      <span class="m-label">${esc(x.label)} · ${statName[stat]}</span>
+      ${x.target ? `<span class="m-target">${x.met ? "✓" : "✗"} ${esc(x.target.text)}</span>` : `<span class="m-target muted">range ${x.min}°–${x.max}°</span>`}
+    </div>`);
+  }
+  const lowTracking = m.detectedPct < 50
+    ? `<p class="small" style="color:var(--mid);margin:10px 0 0">⚠ Your full body was only visible in ${m.detectedPct}% of frames, so these numbers may be off.</p>`
+    : "";
+  return `<div class="panel measured">
+    <h3>📐 Measured by MediaPipe</h3>
+    <div class="m-grid">${items.join("")}</div>
+    ${lowTracking}
+    <p class="muted small" style="margin:10px 0 0">Joint angles tracked on your device from a side view (2D estimates, about ±10°).</p>
+  </div>`;
 }
 
 function noticeView(icon, title, message, visibility) {
@@ -432,6 +475,7 @@ function feedbackBody(a, ex) {
         </div>
       </div>
     </div>
+    ${measuredPanel(a.measurements)}
     ${a.good.length ? `<div class="panel"><h3>What you did well</h3><ul class="good-list">${a.good.map((g) => `<li>${esc(g)}</li>`).join("")}</ul></div>` : ""}
     <div class="panel">
       <h3>What to fix</h3>
@@ -471,7 +515,9 @@ function wireSession(user, ex) {
   const stillHere = (phase) => session === s && session.phase === phase;
 
   on("#skip", "click", () => advance(user, { exerciseId: ex.id, status: "skipped" }));
-  on("#rerecord", "click", () => setPhase(user, "setup", { clip: null, analysis: null, message: null }));
+  on("#rerecord", "click", () =>
+    setPhase(user, "setup", { clip: null, analysis: null, message: null, measurements: null, measureFailed: false, needsMeasure: false })
+  );
 
   if (s.phase === "setup") {
     const live = $("#live");
@@ -482,6 +528,7 @@ function wireSession(user, ex) {
         if (!stillHere("setup")) return;
         recorder.attach(live);
         recordBtn.disabled = false;
+        startLivePose(s, ex, live, () => stillHere("setup"));
       })
       .catch((err) => {
         if (!stillHere("setup")) return;
@@ -504,10 +551,15 @@ function wireSession(user, ex) {
       $("#rec").hidden = false;
       beep(990, 350);
       try {
+        s.poseTracker?.reset();
+        s.poseRecording = true;
         const blob = await recorder.record(RECORD_SECONDS, (left) => {
           const t = $("#rec-time");
           if (t) t.textContent = Math.max(0, left);
         });
+        s.poseRecording = false;
+        s.measurements = pose.poseReady() && s.poseTracker ? s.poseTracker.summary() : null;
+        s.needsMeasure = false;
         if (!stillHere("setup")) return;
         beep(990, 350);
         if (!blob.size) throw new Error("the clip came out empty. Make sure the camera preview is showing, then try again.");
@@ -524,24 +576,59 @@ function wireSession(user, ex) {
       if (!file.type.startsWith("video/")) return alert("Please choose a video file.");
       if (file.size > ai.MAX_CLIP_BYTES) return alert("That video is too large (max about 14 MB). Trim it to 15 seconds and try again.");
       setClip(file);
-      setPhase(user, "review");
+      setPhase(user, "review", { measurements: null, measureFailed: false, needsMeasure: true });
     });
+  }
+
+  if (s.phase === "review") {
+    const clip = $("#clip");
+    const canvas = $("#clip-canvas");
+    // Skeleton over the replay (paused while the upload is being measured).
+    const loop = () => {
+      if (!stillHere("review") || !document.body.contains(clip)) return;
+      if (pose.poseReady() && !s.measuring) pose.drawPose(canvas, clip, pose.detect(clip), { fit: "contain" });
+      requestAnimationFrame(loop);
+    };
+    pose.loadPose().then(loop).catch(() => {});
+
+    // Uploaded clips are measured frame by frame (recorded clips were measured live).
+    if (s.needsMeasure) {
+      s.needsMeasure = false;
+      s.measuring = pose
+        .analyzeVideoUrl(s.clip.url, ex, (p) => {
+          const el = $("#measure-status");
+          if (el && stillHere("review")) el.textContent = `📐 Measuring your form with MediaPipe… ${Math.round(p * 100)}%`;
+        })
+        .then((m) => {
+          s.measurements = m;
+          s.measureFailed = !m;
+        })
+        .catch(() => (s.measureFailed = true))
+        .finally(() => {
+          s.measuring = null;
+          const el = $("#measure-status");
+          if (el && stillHere("review")) el.textContent = measureStatusText();
+        });
+      const el = $("#measure-status");
+      if (el) el.textContent = measureStatusText();
+    }
   }
 
   const analyze = async () => {
     setPhase(user, "analyzing");
     try {
-      const result = await ai.analyzeClip(s.clip.blob, ex);
+      if (s.measuring) await s.measuring; // include MediaPipe numbers if an upload is still being measured
+      const result = await ai.analyzeClip(s.clip.blob, ex, s.measurements);
       if (session !== s) return;
       if (!result.visible) setPhase(user, "invisible", { message: result.visibilityIssue });
-      else setPhase(user, "feedback", { analysis: result });
+      else setPhase(user, "feedback", { analysis: { ...result, measurements: s.measurements } });
     } catch (err) {
       if (session === s) setPhase(user, "error", { message: err.message });
     }
   };
   on("#analyze", "click", analyze);
   on("#retry", "click", () => (s.clip ? analyze() : setPhase(user, "setup")));
-  on("#use-sample", "click", () => setPhase(user, "feedback", { analysis: ai.sampleAnalysis(ex) }));
+  on("#use-sample", "click", () => setPhase(user, "feedback", { analysis: { ...ai.sampleAnalysis(ex), measurements: s.measurements } }));
 
   on("#next", "click", () => {
     const a = s.analysis;
@@ -554,14 +641,70 @@ function wireSession(user, ex) {
       issues: a.issues,
       cues: a.cues.length ? a.cues : ex.cues,
       mode: a.mode,
+      measurements: a.measurements || null,
     });
   });
+}
+
+/** Live skeleton, framing check, angle readouts, and rep counter on the webcam preview. */
+function startLivePose(s, ex, video, isActive) {
+  const canvas = $("#pose-canvas");
+  const pill = $("#frame-pill");
+  const hud = $("#pose-hud");
+  s.poseTracker = new pose.PoseTracker(ex);
+  if (pill) pill.textContent = "Loading pose tracking…";
+
+  const tick = () => {
+    if (!isActive() || !document.body.contains(video)) return;
+    if (pose.poseReady()) {
+      const lm = pose.detect(video);
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      let info;
+      if (s.poseRecording) {
+        info = s.poseTracker.add(lm, w, h);
+      } else {
+        const frame = pose.framing(lm);
+        info = { ...(frame.ok ? pose.computeMetrics(lm, ex, w, h) : { values: {}, anchors: {} }), frame };
+      }
+
+      pill.textContent = `${info.frame.ok ? "✓" : "⚠"} ${info.frame.msg}`;
+      pill.className = `frame-pill ${info.frame.ok ? "ok" : "warn"}`;
+
+      const labels = {};
+      for (const spec of ex.pose?.metrics || []) {
+        labels[spec.key] = { value: info.values[spec.key], anchor: info.anchors[spec.key] };
+      }
+      pose.drawPose(canvas, video, lm, { fit: "cover", mirror: true, labels, ok: info.frame.ok });
+
+      const rows = (ex.pose?.metrics || [])
+        .filter((spec) => info.values[spec.key] != null)
+        .map((spec) => `<div><span>${esc(spec.label)}</span><strong>${info.values[spec.key]}°</strong></div>`);
+      const reps = s.poseRecording && ex.pose?.rep && !ex.hold ? `<div class="hud-reps"><strong>${s.poseTracker.reps}</strong> reps</div>` : "";
+      hud.innerHTML = reps + rows.join("");
+      hud.hidden = !reps && !rows.length;
+    }
+    requestAnimationFrame(tick);
+  };
+
+  pose
+    .loadPose()
+    .then(() => requestAnimationFrame(tick))
+    .catch(() => {
+      if (pill) {
+        pill.textContent = "Pose tracking unavailable (check the internet connection)";
+        pill.className = "frame-pill warn";
+      }
+    });
 }
 
 function advance(user, result) {
   session.results.push(result);
   session.index += 1;
-  Object.assign(session, { clip: null, analysis: null, message: null, phase: "setup" });
+  Object.assign(session, {
+    clip: null, analysis: null, message: null, phase: "setup",
+    measurements: null, measureFailed: false, needsMeasure: false, poseRecording: false,
+  });
   if (session.index >= session.ids.length) finishSession(user);
   else viewSession(user);
 }

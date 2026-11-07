@@ -1,6 +1,8 @@
 // Gemini calls: form analysis (D1-D5) and per-exercise history summary (G3).
 // With no API key in js/config.js, everything falls back to sample/local results ("demo mode").
 
+import { describeMeasurements } from "./pose.js";
+
 const API = "https://generativelanguage.googleapis.com/v1beta/models";
 export const MAX_CLIP_BYTES = 14 * 1024 * 1024; // inline request limit is 20 MB after base64
 const TIMEOUT_MS = 90_000;
@@ -29,11 +31,38 @@ function model() {
 
 // ---- low-level call -----------------------------------------------------
 
+const FALLBACK_MODEL = "gemini-flash-lite-latest";
+const RETRYABLE = /high demand|overloaded|unavailable|try again later|rate limit|resource exhausted|took too long|HTTP (429|500|503)/i;
+const PRIMARY_TIMEOUT_MS = 30_000;
+
+/**
+ * Calls Gemini. If the main model is overloaded or slow (common during busy hours),
+ * switches to the faster Flash-Lite model, with one extra retry.
+ */
 async function generate(parts) {
+  const plan = [
+    { m: model(), timeout: PRIMARY_TIMEOUT_MS },
+    { m: FALLBACK_MODEL, timeout: TIMEOUT_MS },
+    { m: FALLBACK_MODEL, timeout: TIMEOUT_MS },
+  ];
+  let lastErr;
+  for (let i = 0; i < plan.length; i++) {
+    try {
+      return await generateOnce(parts, plan[i].m, plan[i].timeout);
+    } catch (e) {
+      lastErr = e;
+      if (!RETRYABLE.test(e.message)) throw e;
+      if (i < plan.length - 1) await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  throw lastErr;
+}
+
+async function generateOnce(parts, modelId, timeoutMs = TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${API}/${encodeURIComponent(model())}:generateContent`, {
+    const res = await fetch(`${API}/${encodeURIComponent(modelId)}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": config.GEMINI_API_KEY.trim() },
       body: JSON.stringify({
@@ -44,8 +73,8 @@ async function generate(parts) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const msg = data?.error?.message || `HTTP ${res.status}`;
-      throw new Error(`Gemini error: ${msg}`);
+      const msg = data?.error?.message || "request failed";
+      throw new Error(`Gemini error: ${msg} (HTTP ${res.status})`);
     }
     const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
     if (!text) {
@@ -91,10 +120,17 @@ function geminiMime(type) {
 
 // ---- form analysis ------------------------------------------------------
 
-export function analysisPrompt(ex) {
+export function analysisPrompt(ex, measurements = null) {
+  const measured = measurements
+    ? `
+
+Objective measurements from MediaPipe pose tracking of this same clip (2D side-view estimates, can be off by about 10 degrees):
+${describeMeasurements(measurements)}
+Use these numbers to make your feedback concrete (quote a specific angle or rep count when it helps the user), but if they clearly conflict with what you see in the video, trust the video. If MediaPipe counted reps, prefer its count for "repsObserved".`
+    : "";
   return `You are a certified strength and conditioning coach reviewing a 15-second webcam clip of a BEGINNER at a college recreation center performing: ${ex.name}.
 
-Focus on these checkpoints for ${ex.name}: ${ex.checkpoints}.
+Focus on these checkpoints for ${ex.name}: ${ex.checkpoints}.${measured}
 
 Rules:
 - Only comment on what you can actually see in the video. Never invent problems.
@@ -140,7 +176,7 @@ function normalizeAnalysis(raw, ex, mode) {
 }
 
 /** Returns { raw, result }. Used by the app and by tools/prompt-test.html. */
-export async function analyzeClipDetailed(blob, ex) {
+export async function analyzeClipDetailed(blob, ex, measurements = null) {
   if (!keyReady()) {
     await new Promise((r) => setTimeout(r, 1200)); // feel like real analysis in demo mode
     const result = sampleAnalysis(ex);
@@ -152,13 +188,13 @@ export async function analyzeClipDetailed(blob, ex) {
   const data = await blobToBase64(blob);
   const text = await generate([
     { inline_data: { mime_type: geminiMime(blob.type), data } },
-    { text: analysisPrompt(ex) },
+    { text: analysisPrompt(ex, measurements) },
   ]);
   return { raw: text, result: normalizeAnalysis(parseJson(text), ex, "ai") };
 }
 
-export async function analyzeClip(blob, ex) {
-  return (await analyzeClipDetailed(blob, ex)).result;
+export async function analyzeClip(blob, ex, measurements = null) {
+  return (await analyzeClipDetailed(blob, ex, measurements)).result;
 }
 
 const SAMPLES = {

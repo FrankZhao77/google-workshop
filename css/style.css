@@ -169,6 +169,35 @@ select { font: inherit; padding: 12px; border-radius: 10px; border: 1.5px solid 
 }
 .rec .dot { width: 16px; height: 16px; border-radius: 50%; background: #ff3b30; animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: 0.25; } }
+/* ---- MediaPipe overlay ---- */
+.pose-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.frame-pill {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); white-space: nowrap;
+  padding: 7px 16px; border-radius: 999px; font-weight: 800; font-size: 0.95rem;
+  background: rgba(0, 0, 0, 0.65); color: #fff;
+}
+.frame-pill.ok { background: rgba(31, 122, 77, 0.92); }
+.frame-pill.warn { background: rgba(154, 106, 0, 0.92); }
+.pose-hud {
+  position: absolute; top: 14px; right: 14px; min-width: 170px; padding: 10px 14px; border-radius: 12px;
+  background: rgba(20, 5, 5, 0.72); color: #fff; font-size: 0.9rem; display: flex; flex-direction: column; gap: 4px;
+}
+.pose-hud div { display: flex; justify-content: space-between; gap: 14px; }
+.pose-hud strong { color: #ffd88a; font-size: 1.05rem; }
+.pose-hud .hud-reps { justify-content: flex-start; align-items: baseline; gap: 8px; font-size: 1rem; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px; }
+.pose-hud .hud-reps strong { font-size: 2rem; color: #fff; }
+.measure-status { font-weight: 600; color: var(--maroon-2); font-size: 0.92rem; }
+.measured { border-left: 5px solid var(--maroon); }
+.m-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.m-item { background: #f7f3f2; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.m-item.ok { background: var(--good-soft); }
+.m-item.bad { background: var(--low-soft); }
+.m-val { font-size: 1.6rem; font-weight: 900; line-height: 1.1; }
+.m-label { font-size: 0.82rem; font-weight: 700; color: var(--muted); }
+.m-target { font-size: 0.8rem; }
+.m-item.ok .m-target { color: var(--good); }
+.m-item.bad .m-target { color: var(--low); }
+
 .cam-error { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: #fff; background: #2a1414; }
 
 .side { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }

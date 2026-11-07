@@ -24,6 +24,7 @@
     <script type="module">
       import { EXERCISES, getExercise } from "../js/exercises.js";
       import * as ai from "../js/gemini.js";
+      import * as pose from "../js/pose.js";
 
       await ai.init();
       const $ = (id) => document.getElementById(id);
@@ -40,7 +41,18 @@
         $("raw").textContent = $("norm").textContent = "";
         const t0 = performance.now();
         try {
-          const { raw, result } = await ai.analyzeClipDetailed(file, getExercise($("ex").value));
+          const ex = getExercise($("ex").value);
+          let measurements = null;
+          try {
+            const url = URL.createObjectURL(file);
+            measurements = await pose.analyzeVideoUrl(url, ex, (p) => ($("status").textContent = `MediaPipe measuring… ${Math.round(p * 100)}%`));
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            console.warn("MediaPipe failed", e);
+          }
+          $("prompt").textContent = ai.analysisPrompt(ex, measurements);
+          $("status").textContent = "Gemini analyzing…";
+          const { raw, result } = await ai.analyzeClipDetailed(file, ex, measurements);
           $("status").textContent = `Done in ${((performance.now() - t0) / 1000).toFixed(1)}s · ${(file.size / 1e6).toFixed(1)} MB`;
           $("raw").textContent = raw;
           $("norm").textContent = JSON.stringify(result, null, 2);
