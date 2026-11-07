@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spotter Prompt Test</title>
+    <link rel="stylesheet" href="../css/style.css" />
+  </head>
+  <body>
+    <header class="topbar"><a class="brand" href="../index.html"><span class="brand-mark">S</span> Spotter · Prompt test</a></header>
+    <main>
+      <h1>Gemini prompt test (AT-57)</h1>
+      <p class="muted">Run a test clip through the exact prompt the app uses and see Gemini's raw JSON.</p>
+      <div class="panel">
+        <label class="field">Exercise <select id="ex"></select></label>
+        <label class="field">Test clip <input type="file" id="file" accept="video/*" /></label>
+        <button class="btn primary" id="run">Run analysis</button>
+        <p id="status" class="muted"></p>
+      </div>
+      <div class="panel"><h3>Prompt sent</h3><pre id="prompt" style="white-space:pre-wrap;font-size:13px"></pre></div>
+      <div class="panel"><h3>Raw response</h3><pre id="raw" style="white-space:pre-wrap;font-size:13px"></pre></div>
+      <div class="panel"><h3>What the app will show (normalized)</h3><pre id="norm" style="white-space:pre-wrap;font-size:13px"></pre></div>
+    </main>
+    <script type="module">
+      import { EXERCISES, getExercise } from "../js/exercises.js";
+      import * as ai from "../js/gemini.js";
+
+      await ai.init();
+      const $ = (id) => document.getElementById(id);
+      $("ex").innerHTML = EXERCISES.map((e) => `<option value="${e.id}">${e.name}</option>`).join("");
+      const showPrompt = () => ($("prompt").textContent = ai.analysisPrompt(getExercise($("ex").value)));
+      $("ex").onchange = showPrompt;
+      showPrompt();
+      if (!ai.keyReady()) $("status").textContent = "No API key in js/config.js: results will be sample data.";
+
+      $("run").onclick = async () => {
+        const file = $("file").files[0];
+        if (!file) return ($("status").textContent = "Choose a clip first.");
+        $("status").textContent = "Analyzing…";
+        $("raw").textContent = $("norm").textContent = "";
+        const t0 = performance.now();
+        try {
+          const { raw, result } = await ai.analyzeClipDetailed(file, getExercise($("ex").value));
+          $("status").textContent = `Done in ${((performance.now() - t0) / 1000).toFixed(1)}s · ${(file.size / 1e6).toFixed(1)} MB`;
+          $("raw").textContent = raw;
+          $("norm").textContent = JSON.stringify(result, null, 2);
+        } catch (e) {
+          $("status").textContent = `Error: ${e.message}`;
+        }
+      };
+    </script>
+  </body>
+</html>

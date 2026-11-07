@@ -1,0 +1,8 @@
+# Secrets: your Gemini API key lives here
+js/config.js
+
+# Test footage of teammates (never commit)
+test-clips/
+
+.DS_Store
+Thumbs.db
