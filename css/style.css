@@ -234,6 +234,22 @@ select { font: inherit; padding: 12px; border-radius: 10px; border: 1.5px solid 
 .issue:first-of-type { border-top: 0; padding-top: 4px; }
 .issue-n { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--low-soft); color: var(--low); font-weight: 800; }
 .issue p { margin: 0; }
+.issue-text { flex: 1; min-width: 0; }
+.issue-shot {
+  flex: none; position: relative; width: 210px; padding: 0; border: 2px solid var(--line); border-radius: 10px;
+  overflow: hidden; background: #120808; cursor: zoom-in; transition: border-color 0.15s, transform 0.1s;
+}
+.issue-shot:hover { border-color: var(--maroon); transform: translateY(-1px); }
+.issue-shot img { display: block; width: 100%; height: auto; }
+.shot-ts {
+  position: absolute; left: 6px; bottom: 6px; background: rgba(20, 5, 5, 0.8); color: #ffd88a;
+  font-size: 0.78rem; font-weight: 800; padding: 2px 8px; border-radius: 999px;
+}
+.shot-large { display: block; width: 100%; border-radius: 12px; margin-top: 8px; background: #120808; }
+@media (max-width: 640px) {
+  .issue { flex-wrap: wrap; }
+  .issue-shot { width: calc(100% - 44px); margin-left: 44px; }
+}
 .issue .fix { color: var(--good); margin-top: 4px; }
 .ts { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
 .cues { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }

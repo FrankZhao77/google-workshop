@@ -242,8 +242,11 @@ export function describeMeasurements(m) {
   return lines.join("\n");
 }
 
-/** Analyzes a video file frame by frame (for uploaded clips). Calls onProgress(0-1). */
-export async function analyzeVideoUrl(url, ex, onProgress = () => {}) {
+/**
+ * Analyzes a video file frame by frame (for uploaded clips). Calls onProgress(0-1),
+ * and onFrame(seconds, video, landmarks) for each analyzed frame (used for snapshots).
+ */
+export async function analyzeVideoUrl(url, ex, onProgress = () => {}, onFrame = null) {
   await loadPose();
   const v = document.createElement("video");
   v.muted = true;
@@ -260,13 +263,42 @@ export async function analyzeVideoUrl(url, ex, onProgress = () => {}) {
   for (let t = 0; t < v.duration; t += step) {
     v.currentTime = t;
     await new Promise((r) => (v.onseeked = r));
-    tracker.add(detect(v), v.videoWidth, v.videoHeight);
+    const lm = detect(v);
+    tracker.add(lm, v.videoWidth, v.videoHeight);
+    if (onFrame) onFrame(t, v, lm);
     onProgress(Math.min(1, t / v.duration));
   }
   onProgress(1);
   v.removeAttribute("src");
   v.load();
   return tracker.summary();
+}
+
+// ---- snapshots ----------------------------------------------------------
+
+/**
+ * JPEG data URL of the current video frame with the skeleton and angle labels drawn on it.
+ * Used for the "What to fix" snapshots. Kept in memory only; never saved.
+ */
+export function snapshot(video, ex, lm, width = 480) {
+  if (!video?.videoWidth) return null;
+  const c = document.createElement("canvas");
+  c.width = width;
+  c.height = Math.round((width * video.videoHeight) / video.videoWidth);
+  const ctx = c.getContext("2d");
+  ctx.drawImage(video, 0, 0, c.width, c.height);
+  if (lm) {
+    const frame = framing(lm);
+    const m = computeMetrics(lm, ex, video.videoWidth, video.videoHeight);
+    const labels = {};
+    for (const spec of ex.pose?.metrics || []) labels[spec.key] = { value: m.values[spec.key], anchor: m.anchors[spec.key] };
+    drawPose(c, video, lm, { fit: "contain", fixed: true, clear: false, labels, ok: frame.ok });
+  }
+  try {
+    return c.toDataURL("image/jpeg", 0.8);
+  } catch {
+    return null;
+  }
 }
 
 // ---- drawing ------------------------------------------------------------
@@ -276,17 +308,18 @@ export async function analyzeVideoUrl(url, ex, onProgress = () => {}) {
  * mirror = true when the video is shown mirrored (webcam preview).
  * labels = { key: { value, anchor } } to draw angle readouts next to joints.
  */
-export function drawPose(canvas, video, lm, { fit = "cover", mirror = false, labels = {}, ok = true } = {}) {
-  const dpr = window.devicePixelRatio || 1;
-  const W = canvas.clientWidth;
-  const H = canvas.clientHeight;
-  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+export function drawPose(canvas, video, lm, { fit = "cover", mirror = false, labels = {}, ok = true, fixed = false, clear = true } = {}) {
+  // fixed = draw into an off-screen canvas at its own pixel size (used for snapshots).
+  const dpr = fixed ? 1 : window.devicePixelRatio || 1;
+  const W = fixed ? canvas.width : canvas.clientWidth;
+  const H = fixed ? canvas.height : canvas.clientHeight;
+  if (!fixed && (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr))) {
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
   }
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, W, H);
+  if (clear) ctx.clearRect(0, 0, W, H);
   if (!lm || !video?.videoWidth || !lib) return;
 
   const vw = video.videoWidth;

@@ -310,7 +310,7 @@ function showPreview(ex) {
 // ---- session flow (C1-C6, D1-D5, E1-E2, F1-F4) ---------------------------
 
 function startSession(ids) {
-  session = { ids, index: 0, results: [], phase: "setup", clip: null, analysis: null, message: null, urls: [], measurements: null };
+  session = { ids, index: 0, results: [], phase: "setup", clip: null, analysis: null, message: null, urls: [], measurements: null, frames: [] };
   pose.loadPose().catch(() => {}); // start downloading MediaPipe while the user sets up
   go("session");
 }
@@ -463,7 +463,24 @@ function noticeView(icon, title, message, visibility) {
     </div>`;
 }
 
-function feedbackBody(a, ex) {
+/** "0:05" / "1:02.5" / "5" → seconds. */
+function parseTimestamp(ts) {
+  const m = String(ts ?? "").match(/(\d+):(\d{1,2}(?:\.\d+)?)/);
+  if (m) return Number(m[1]) * 60 + Number(m[2]);
+  const n = parseFloat(ts);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** The captured frame closest to a timestamp (within 1.5 s), or null. */
+function frameAt(frames, ts) {
+  const t = parseTimestamp(ts);
+  if (t == null || !frames?.length) return null;
+  let best = null;
+  for (const f of frames) if (f.img && (!best || Math.abs(f.t - t) < Math.abs(best.t - t))) best = f;
+  return best && Math.abs(best.t - t) <= 1.5 ? best : null;
+}
+
+function feedbackBody(a, ex, frames = null) {
   const reps = a.repsObserved != null ? `${a.repsObserved} reps observed` : ex.hold ? "Plank hold" : "";
   return `
     <div class="panel">
@@ -480,14 +497,21 @@ function feedbackBody(a, ex) {
     <div class="panel">
       <h3>What to fix</h3>
       ${a.issues.length
-        ? a.issues.map((i, n) => `
+        ? a.issues.map((i, n) => {
+          const shot = frameAt(frames, i.timestamp);
+          return `
           <div class="issue">
             <span class="issue-n">${n + 1}</span>
-            <div>
+            <div class="issue-text">
               <p><strong>${esc(i.problem)}</strong>${i.timestamp ? ` <span class="ts">at ${esc(i.timestamp)}</span>` : ""}</p>
               <p class="fix">Fix: ${esc(i.fix)}</p>
             </div>
-          </div>`).join("")
+            ${shot ? `<button class="issue-shot" data-caption="${esc(`${i.problem} (at ${i.timestamp})`)}" data-fix="${esc(i.fix)}" title="Click to enlarge">
+              <img src="${shot.img}" alt="Your form at ${esc(i.timestamp)}" />
+              <span class="shot-ts">📐 ${esc(i.timestamp)}</span>
+            </button>` : ""}
+          </div>`;
+        }).join("")
         : `<p style="margin:0">No major issues spotted. Great set!</p>`}
     </div>`;
 }
@@ -497,7 +521,7 @@ function feedbackView(ex, a) {
   const last = session.index === session.ids.length - 1;
   return `
     <div class="feedback">
-      <div>${feedbackBody(a, ex)}</div>
+      <div>${feedbackBody(a, ex, session.frames)}</div>
       <aside class="panel">
         <h3>Correct form</h3>
         <div class="video-box">${refVideo(ex.video)}</div>
@@ -516,7 +540,7 @@ function wireSession(user, ex) {
 
   on("#skip", "click", () => advance(user, { exerciseId: ex.id, status: "skipped" }));
   on("#rerecord", "click", () =>
-    setPhase(user, "setup", { clip: null, analysis: null, message: null, measurements: null, measureFailed: false, needsMeasure: false })
+    setPhase(user, "setup", { clip: null, analysis: null, message: null, measurements: null, measureFailed: false, needsMeasure: false, frames: [] })
   );
 
   if (s.phase === "setup") {
@@ -552,6 +576,9 @@ function wireSession(user, ex) {
       beep(990, 350);
       try {
         s.poseTracker?.reset();
+        s.frames = [];
+        s.lastShot = -1;
+        s.recordStart = performance.now();
         s.poseRecording = true;
         const blob = await recorder.record(RECORD_SECONDS, (left) => {
           const t = $("#rec-time");
@@ -576,7 +603,7 @@ function wireSession(user, ex) {
       if (!file.type.startsWith("video/")) return alert("Please choose a video file.");
       if (file.size > ai.MAX_CLIP_BYTES) return alert("That video is too large (max about 14 MB). Trim it to 15 seconds and try again.");
       setClip(file);
-      setPhase(user, "review", { measurements: null, measureFailed: false, needsMeasure: true });
+      setPhase(user, "review", { measurements: null, measureFailed: false, needsMeasure: true, frames: [] });
     });
   }
 
@@ -595,10 +622,18 @@ function wireSession(user, ex) {
     if (s.needsMeasure) {
       s.needsMeasure = false;
       s.measuring = pose
-        .analyzeVideoUrl(s.clip.url, ex, (p) => {
-          const el = $("#measure-status");
-          if (el && stillHere("review")) el.textContent = `📐 Measuring your form with MediaPipe… ${Math.round(p * 100)}%`;
-        })
+        .analyzeVideoUrl(
+          s.clip.url,
+          ex,
+          (p) => {
+            const el = $("#measure-status");
+            if (el && stillHere("review")) el.textContent = `📐 Measuring your form with MediaPipe… ${Math.round(p * 100)}%`;
+          },
+          (t, video, lm) => {
+            // Keep a snapshot every half second for the "What to fix" section.
+            if (Math.abs(t * 2 - Math.round(t * 2)) < 1e-6) s.frames.push({ t, img: pose.snapshot(video, ex, lm) });
+          }
+        )
         .then((m) => {
           s.measurements = m;
           s.measureFailed = !m;
@@ -628,6 +663,17 @@ function wireSession(user, ex) {
   };
   on("#analyze", "click", analyze);
   on("#retry", "click", () => (s.clip ? analyze() : setPhase(user, "setup")));
+  $$(".issue-shot").forEach((btn) =>
+    btn.addEventListener("click", () =>
+      modal(`
+        <h2 style="font-size:1.15rem">${esc(btn.dataset.caption)}</h2>
+        <img class="shot-large" src="${btn.querySelector("img").src}" alt="" />
+        <p class="fix" style="margin:12px 0 0">Fix: ${esc(btn.dataset.fix)}</p>
+        <p class="muted small" style="margin:6px 0 0">Frame from your clip with MediaPipe pose tracking. Not saved after the session.</p>
+        <div class="actions"><button class="btn primary" data-close>Close</button></div>`)
+    )
+  );
+
   on("#use-sample", "click", () => setPhase(user, "feedback", { analysis: { ...ai.sampleAnalysis(ex), measurements: s.measurements } }));
 
   on("#next", "click", () => {
@@ -656,8 +702,22 @@ function startLivePose(s, ex, video, isActive) {
 
   const tick = () => {
     if (!isActive() || !document.body.contains(video)) return;
+    // Snapshot every half second while recording (for the "What to fix" section).
+    const shootNow = () => {
+      if (!s.poseRecording) return false;
+      const t = (performance.now() - s.recordStart) / 1000;
+      if (t - s.lastShot < 0.5) return false;
+      s.lastShot = t;
+      return t;
+    };
+    if (!pose.poseReady()) {
+      const t = shootNow();
+      if (t !== false) s.frames.push({ t, img: pose.snapshot(video, ex, null) });
+    }
     if (pose.poseReady()) {
       const lm = pose.detect(video);
+      const t = shootNow();
+      if (t !== false) s.frames.push({ t, img: pose.snapshot(video, ex, lm) });
       const w = video.videoWidth;
       const h = video.videoHeight;
       let info;
@@ -695,6 +755,7 @@ function startLivePose(s, ex, video, isActive) {
         pill.textContent = "Pose tracking unavailable (check the internet connection)";
         pill.className = "frame-pill warn";
       }
+      requestAnimationFrame(tick); // still take plain snapshots for "What to fix"
     });
 }
 
@@ -703,7 +764,7 @@ function advance(user, result) {
   session.index += 1;
   Object.assign(session, {
     clip: null, analysis: null, message: null, phase: "setup",
-    measurements: null, measureFailed: false, needsMeasure: false, poseRecording: false,
+    measurements: null, measureFailed: false, needsMeasure: false, poseRecording: false, frames: [],
   });
   if (session.index >= session.ids.length) finishSession(user);
   else viewSession(user);
