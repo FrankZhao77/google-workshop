@@ -367,7 +367,7 @@ const POSE = {
   "reverse-lunge": LUNGE_POSE,
   rdl: {
     metrics: [
-      { ...HIP, label: "Hip hinge angle", target: T("min", "<=", 120, "hip angle ≤ 120° = a deep enough hinge") },
+      { ...HIP, label: "Hip hinge angle", target: T("min", "<=", 130, "hip angle ≤ 130° = a deep enough hinge") },
       { ...KNEE, target: T("min", ">=", 130, "knees stay ≥ 130° (a hinge, not a squat)") },
     ],
     rep: { metric: "hip", work: "<", workAt: 135, restAt: 160 },

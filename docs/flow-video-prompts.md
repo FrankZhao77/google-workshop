@@ -13,15 +13,15 @@ Until a file is uploaded, the app shows a "Reference video coming soon" placehol
 
 ## Videos to make
 
-**Still needed: `rdl.mp4`, `glute-bridge.mp4`, `mountain-climber.mp4`.** The other 9 are uploaded and checked.
+**Still needed: `mountain-climber.mp4`.** The other 11 are uploaded and checked.
 
 | # | File | Exercise | Equipment | Status |
 |---|---|---|---|---|
 | 1 | `reverse-lunge.mp4` | Reverse Lunge | None | ✅ |
 | 2 | `goblet-squat.mp4` | Goblet Squat | Dumbbell | ✅ |
-| 3 | `rdl.mp4` | Dumbbell Romanian Deadlift | Dumbbell | **needed** |
+| 3 | `rdl.mp4` | Dumbbell Romanian Deadlift | Dumbbell | ✅ |
 | 4 | `step-up.mp4` | Step-up | Bench | ✅ |
-| 5 | `glute-bridge.mp4` | Glute Bridge | None | **needed** |
+| 5 | `glute-bridge.mp4` | Glute Bridge | None | ✅ |
 | 6 | `wall-sit.mp4` | Wall Sit | Wall | ✅ |
 | 7 | `incline-pushup.mp4` | Incline Push-up | Bench | ✅ |
 | 8 | `bench-dip.mp4` | Bench Dip | Bench | ✅ |
