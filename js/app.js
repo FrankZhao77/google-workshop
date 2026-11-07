@@ -2,7 +2,7 @@
 // Routes: #login #home #pick #session #summary/{id} #history #history/{id}
 
 import * as store from "./store.js";
-import { EXERCISES, getExercise } from "./exercises.js";
+import { EXERCISES, CATEGORIES, getExercise } from "./exercises.js";
 import { Recorder, countdown, beep } from "./recorder.js";
 import * as ai from "./gemini.js";
 
@@ -16,6 +16,11 @@ const recorder = new Recorder();
 let session = null;
 /** Exercises chosen on the picker. */
 let picked = new Set();
+/** Picker filters: category ("All" or one of CATEGORIES) and equipment ("Any" or a type). */
+let pickCategory = "All";
+let pickEquipment = "Any";
+const EQUIPMENT = ["Any", ...new Set(EXERCISES.map((e) => e.equipment))];
+const equipIcon = { None: "🙌", Dumbbell: "🏋️", Bench: "🪑", Wall: "🧱" };
 
 // ---- helpers ------------------------------------------------------------
 
@@ -192,16 +197,44 @@ function showDisclaimer(user) {
 // ---- exercise picker (B3, B4) -------------------------------------------
 
 function viewPick(user) {
+  const visible = EXERCISES.filter(
+    (ex) => (pickCategory === "All" || ex.category === pickCategory) && (pickEquipment === "Any" || ex.equipment === pickEquipment)
+  );
+  const countIn = (cat) => (cat === "All" ? EXERCISES.length : EXERCISES.filter((e) => e.category === cat).length);
+  const pickedNames = EXERCISES.filter((e) => picked.has(e.id)).map((e) => e.name);
+  const scrollY = window.scrollY;
+
   render(user, `
     <section>
       <span class="eyebrow">New session</span>
       <h1>Pick today's exercises</h1>
       <p class="muted">Choose one or more. You'll record a 15-second set of each.</p>
-      <div class="grid">
-        ${EXERCISES.map((ex) => `
+
+      <div class="filters">
+        <div class="chips" role="tablist" aria-label="Body area">
+          ${["All", ...CATEGORIES].map((c) => `
+            <button class="chip ${c === pickCategory ? "active" : ""}" data-cat="${esc(c)}" role="tab" aria-selected="${c === pickCategory}">
+              ${esc(c)} <span class="chip-n">${countIn(c)}</span>
+            </button>`).join("")}
+        </div>
+        <label class="equip-filter">Equipment
+          <select id="equip">${EQUIPMENT.map((e) => `<option ${e === pickEquipment ? "selected" : ""}>${esc(e)}</option>`).join("")}</select>
+        </label>
+      </div>
+
+      ${visible.length ? `<div class="grid">
+        ${visible.map((ex) => `
           <article class="ex-card ${picked.has(ex.id) ? "selected" : ""}" data-id="${ex.id}" tabindex="0" role="button" aria-pressed="${picked.has(ex.id)}">
-            <div class="thumb">${refVideo(ex.video, { thumb: true })}</div>
+            <div class="thumb">
+              ${refVideo(ex.video, { thumb: true })}
+              ${picked.has(ex.id) ? `<span class="picked-badge">✓</span>` : ""}
+            </div>
             <div class="ex-body">
+              <div class="tags">
+                <span class="tag-cat">${esc(ex.category)}</span>
+                <span class="tag-eq">${equipIcon[ex.equipment] || ""} ${esc(ex.equipment === "None" ? "No equipment" : ex.equipment)}</span>
+                ${ex.hold ? `<span class="tag-eq">⏱ Hold</span>` : ""}
+              </div>
               <h3>${esc(ex.name)}</h3>
               <p class="muted small" style="margin:0">${esc(ex.blurb)}</p>
               <div class="row">
@@ -210,12 +243,34 @@ function viewPick(user) {
               </div>
             </div>
           </article>`).join("")}
-      </div>
+      </div>` : `<div class="empty panel"><p>No exercises match these filters.</p></div>`}
+
       <div class="sticky-actions">
-        <span><strong>${picked.size}</strong> selected</span>
-        <button class="btn primary big" id="go" ${picked.size ? "" : "disabled"}>Start session →</button>
+        <div class="picked-summary">
+          <strong>${picked.size}</strong> selected${pickedNames.length ? `<span class="muted small"> · ${pickedNames.map(esc).join(", ")}</span>` : ""}
+        </div>
+        <div class="row" style="margin:0">
+          ${picked.size ? `<button class="btn ghost small" id="clear">Clear</button>` : ""}
+          <button class="btn primary big" id="go" ${picked.size ? "" : "disabled"}>Start session →</button>
+        </div>
       </div>
     </section>`);
+  window.scrollTo(0, scrollY); // keep position when toggling cards
+
+  $$(".chip").forEach((chip) =>
+    chip.addEventListener("click", () => {
+      pickCategory = chip.dataset.cat;
+      viewPick(user);
+    })
+  );
+  on("#equip", "change", (e) => {
+    pickEquipment = e.target.value;
+    viewPick(user);
+  });
+  on("#clear", "click", () => {
+    picked = new Set();
+    viewPick(user);
+  });
 
   $$(".ex-card").forEach((card) => {
     const toggle = () => {
@@ -320,6 +375,7 @@ function setupView(ex) {
         <div class="cam-error" id="cam-error" hidden></div>
       </div>
       <aside class="side">
+        ${ex.equipment !== "None" ? `<p class="equip-note">${equipIcon[ex.equipment] || ""} You'll need: <strong>${esc(ex.equipment === "Bench" ? "a bench or sturdy box" : ex.equipment === "Wall" ? "a clear wall" : "a light dumbbell")}</strong></p>` : ""}
         <h3>Set up your camera</h3>
         <ul>${ex.setupTips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
         <p class="muted small">${ex.hold ? "Hold the plank for the full 15 seconds." : "Do slow, controlled reps for the full 15 seconds."} Recording starts after a ${COUNTDOWN_SECONDS}-second countdown and stops on its own.</p>

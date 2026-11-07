@@ -199,7 +199,15 @@ const SAMPLES = {
 };
 
 export function sampleAnalysis(ex) {
-  return normalizeAnalysis({ visible: true, ...SAMPLES[ex.id] }, ex, "sample");
+  const fromExercise = ex.sample && {
+    score: 6,
+    repsObserved: ex.hold ? null : 6,
+    good: [ex.sample.good || "Controlled pace through the set"],
+    issues: [{ problem: ex.sample.problem, fix: ex.sample.fix, timestamp: "0:07" }],
+    cues: ex.cues,
+  };
+  const generic = { score: 7, repsObserved: ex.hold ? null : 6, good: ["Controlled pace through the set"], issues: [], cues: ex.cues };
+  return normalizeAnalysis({ visible: true, ...(SAMPLES[ex.id] || fromExercise || generic) }, ex, "sample");
 }
 
 // ---- per-exercise history summary (G3) ----------------------------------
