@@ -11,9 +11,9 @@ Drop the exported Flow clips here with these exact names. Until a file is here, 
 | `plank.mp4` | Forearm Plank | ✅ uploaded |
 | `reverse-lunge.mp4` | Reverse Lunge | ✅ uploaded |
 | `goblet-squat.mp4` | Goblet Squat | ✅ uploaded |
-| `rdl.mp4` | Dumbbell Romanian Deadlift | needed |
+| `rdl.mp4` | Dumbbell Romanian Deadlift | ✅ uploaded |
 | `step-up.mp4` | Step-up | ✅ uploaded |
-| `glute-bridge.mp4` | Glute Bridge | needed |
+| `glute-bridge.mp4` | Glute Bridge | ✅ uploaded |
 | `wall-sit.mp4` | Wall Sit | ✅ uploaded |
 | `incline-pushup.mp4` | Incline Push-up | ✅ uploaded |
 | `bench-dip.mp4` | Bench Dip | ✅ uploaded |
